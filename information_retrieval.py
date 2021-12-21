@@ -15,7 +15,7 @@ def read_files(path):
     files = os.listdir(path)
     for file in files:
         filename = os.fsdecode(file)
-        with open(path+"/"+filename) as f:
+        with open(path+"/"+filename, encoding="utf8") as f:
             Str = ''
             for a in f.read().split("\n"):
                 if a:
