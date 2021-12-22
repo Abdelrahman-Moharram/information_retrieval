@@ -9,7 +9,17 @@ from tabulate import tabulate
 
 
 ##################################              utils               ####################################
-
+def sort_dict(dic):
+    l = len(dic)
+    marklist=list(dic.items())
+    for i in range(l-1):
+        for j in range(i+1,l):
+            if marklist[i][1]<marklist[j][1]:
+                t=marklist[i]
+                marklist[i]=marklist[j]
+                marklist[j]=t
+    sortdict=dict(marklist)
+    return sortdict
 def read_files(path):
     list_files = []
     files = os.listdir(path)
@@ -38,12 +48,19 @@ def remove_white_spaces(input_string):
     return re.sub(r'\s+', ' ', input_string).strip()
 
 def clear_str(string):
-    for p in "!.,:@#$%^&?<>*()[}{]-=;/\"\\\t\n":
+
+    for p in '!.,:@#$%^&?<>*()[}{]-=;/\"\\\t\n“”―':
         String = ''
         if p in '\n;?:!.,.':
             string = string.replace(p,' ')
         else:
             string = string.replace(p,'')
+    stopWords = ['the', 'a', 'an', 'in','of','that','then','is','are','was','were','out']
+    new_words = []
+    for word in string.split():
+        if word not in stopWords:
+            new_words.append(word)
+    string = " ".join(new_words)
     return remove_white_spaces(string).lower()
 def preprocess(list_files):
     new_list = []
@@ -206,9 +223,9 @@ def query(txt, idf):
         tf_idf[w] = idf[w] * weights[w]
     for word in tf_idf:
         sum += tf_idf[word]
-    return weights, tf_idf, sum
+    return weights, tf_idf
 
-def vectorSpaceModel(tf_dict, idf, s):
+def vectorSpaceModel(tf_dict, idf,):
     file_tf_weight = {}
     file_tf_idf = {}
     files_weights_sums = {}
@@ -220,19 +237,49 @@ def vectorSpaceModel(tf_dict, idf, s):
     
     for file in file_tf_weight:
         file_tf_idf[file] = {}
-        sum = 0
         for word in file_tf_weight[file]:
             file_tf_idf[file][word] = file_tf_weight[file][word] * idf[word]
-            sum += file_tf_idf[file][word]
-        files_weights_sums[file] = sum
+            
     
-    for w in files_weights_sums:
-        similarity_doc_query[w] = files_weights_sums[w] * s
+
     # print("\n\n\nfile_tf_idf ",file_tf_idf," \n\n files_tfidf_sums: ", files_weights_sums, "\n\nsimilarity_doc_query: ",similarity_doc_query)
     
-    return file_tf_weight, file_tf_idf, files_weights_sums, similarity_doc_query
-        
+    return file_tf_weight, file_tf_idf
 
+def query_length(file_tf_idf):
+    sum = 0
+    for word in file_tf_idf:
+        sum += file_tf_idf[word] ** 2
+    return sum ** .5
+
+def Normalize(query_tf_idf, file_tf_idf):
+    file_length = {}
+    tfidf_normlize = {}
+    query_norm = {}
+    scores = {}
+    ql = query_length(query_tf_idf)
+
+    for word in query_tf_idf:
+        query_norm[word] = query_tf_idf[word] / ql
+    
+    for file in file_tf_idf: 
+        tfidf_normlize[file] = {}
+        score = 0
+        file_length[file] = query_length(file_tf_idf[file])
+        for word in file_tf_idf[file]:
+            tfidf_normlize[file][word] =  file_tf_idf[file][word] / file_length[file]
+            if word in query_norm:
+                score += tfidf_normlize[file][word] * query_norm[word]
+        if score:
+            scores[file] = score
+    
+
+    return ql, query_norm, file_length, tfidf_normlize, scores
+    
+    view_list = []
+    for x  in file_length:
+        view_list.append([x, file_length[x]])
+    print(tabulate(view_list, headers=['word', 'file_length'], tablefmt='orgtbl'),"\n\n\n")
 
 def printer(title,unique_words, files):
     print("_"*150, "\n\t\t\t\t\t\t\t\t", title,"\n","_"*150,"\n")
@@ -254,8 +301,9 @@ def printer(title,unique_words, files):
                 row.append(0)
         rows.append(row)
     print(tabulate(rows, headers=files_names, tablefmt='orgtbl'),"\n\n")
+
+
 #########################################################################################################
-        
 
 def controller(list_files, files_names):
     p_index, phrase, txt = Control(list_files, files_names)
@@ -284,8 +332,9 @@ def controller(list_files, files_names):
     # print("\n\n\ntf_idf: ",tf_idf,"\n\n\n")
     df = DocFreq(list_files, unique_words)
     idf = inverseDocFre(files_names, df)
-    query_weights, query_tf_idf, query_sum = query(txt, idf)
-    file_tf_weight, file_tf_idf, files_weights_sums, similarity_doc_query = vectorSpaceModel(tf_dict, idf, query_sum)
+    query_weights, query_tf_idf = query(txt, idf)
+    file_tf_weight, file_tf_idf = vectorSpaceModel(tf_dict, idf)
+    ql, query_norm, file_length, tfidf_normlize, scores = Normalize(query_tf_idf, file_tf_idf)
     printer("file tf weight",unique_words, file_tf_weight)
     tf_idf = tfidf(weight, idf) 
     # print("\n\n\n\ntf_idf",tf_idf,"\n")
@@ -314,19 +363,25 @@ def controller(list_files, files_names):
     
     
     printer("file tf idf",unique_words, file_tf_idf)
-    
-    print("query_weights",query_weights,"\n\nquery_tf_idf",query_tf_idf,"\nquery_tf_idf_sum:", query_sum,"\n\n\n")
-
-    view_list = []
-    for x  in files_weights_sums:
-        view_list.append([x, files_weights_sums[x]])
-    print(tabulate(view_list, headers=['word', 'files_weights_sums'], tablefmt='orgtbl'), "\n\n\n")
+    printer("tf idf normalize",unique_words, tfidf_normlize)
     
 
+    
+    print("query normalization", query_norm, " \nquery length", ql, "\n\n")
+    
     view_list = []
-    for x  in similarity_doc_query:
-        view_list.append([x, str(files_weights_sums[x]) + " * " + str(query_sum) + " = "+ str(similarity_doc_query[x])])
-    print(tabulate(view_list, headers=['word', 'similarity_doc_query'], tablefmt='orgtbl'), "\n\n\n")
+    for x  in file_length:
+        view_list.append([x, file_length[x]])
+    print(tabulate(view_list, headers=['word', 'file length'], tablefmt='orgtbl'), "\n\n\n")
+
+    print("score => ", sort_dict(scores))
+    
+    
+
+    # view_list = []
+    # for x  in similarity_doc_query:
+    #     view_list.append([x, str(files_weights_sums[x]) + " * "  " = "+ str(similarity_doc_query[x])])
+    # print(tabulate(view_list, headers=['word', 'similarity_doc_query'], tablefmt='orgtbl'), "\n\n\n")
 
 files = read_files("files")
 
